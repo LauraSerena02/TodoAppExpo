@@ -1,75 +1,188 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { FlatList, Text, TouchableOpacity, View } from 'react-native';
+import TaskFilters from '../../src/components/TaskFilters';
+import TaskForm from '../../src/components/TaskForm';
+import TaskItem from '../../src/components/TaskItem';
+import TodayTasksModal from '../../src/components/TodayTasksModal';
+import { useTasks } from '../../src/hooks/useTasks';
+import { appStyles } from '../../src/theme/styles';
+import { CategoryFilter, StatusFilter, Task } from '../../src/types/taskTypes';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function TabOneScreen() {
+  // Destructure properties and functions from the useTasks hook
+  const {
+    taskItems,              // Full list of tasks
+    todayTasks,             // Tasks due today
+    showTodayTasksModal,    // Modal visibility state
+    setShowTodayTasksModal, // Function to set modal visibility
+    addTask,                // Function to add a new task
+    toggleTask,             // Function to mark/unmark task as completed
+    deleteTask,             // Function to delete a task
+    updateTask,             // Function to update an existing task
+    getTodayTasks,          // Function to retrieve today's tasks
+  } = useTasks();
 
-export default function HomeScreen() {
+  // ID of the task currently being edited (if any)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+  // Category and status filters
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+
+  // Handles adding a new task
+  const handleAddTask = (taskData: Omit<Task, 'id' | 'completed'>) => {
+    const newTask: Task = {
+      ...taskData,
+      id: Date.now().toString(),              // Generate a unique ID using timestamp
+      completed: false,                       // New task starts as incomplete
+      dueDate: taskData.dueDate || new Date() // Default due date is today
+    };
+    addTask(newTask);
+  };
+
+  // Handles updating an existing task
+  const handleUpdateTask = (taskData: Omit<Task, 'id' | 'completed'>) => {
+    if (editingTaskId) {
+      const updatedTask: Partial<Task> = {
+        ...taskData,
+        dueDate: new Date(taskData.dueDate || new Date()) // Ensure we always use a new Date object
+      };
+      updateTask(editingTaskId, updatedTask); // Update the task by ID
+      setEditingTaskId(null);                 // Exit edit mode
+    }
+  };
+
+  /**
+   * Handles entering edit mode for a specific task
+   * This function sets the editingTaskId which triggers the form to populate
+   * with the selected task's data. The form will switch from "Add" mode to
+   * "Edit" mode, showing cancel and save buttons instead of just an add button.
+   * 
+   * @param id The ID of the task to be edited
+   */
+  const handleEditTask = (id: string) => {
+    setEditingTaskId(id); // Set the ID of the task we're editing
+  };
+
+  // Cancels editing and returns to normal view
+  const handleCancelEdit = () => {
+    setEditingTaskId(null); // Clear the editing ID
+  };
+
+  // Sets the category filter for task list
+  const handleCategoryChange = (category: CategoryFilter) => {
+    setCategoryFilter(category);
+  };
+
+  // Sets the status filter (completed or pending)
+  const handleStatusChange = (status: StatusFilter) => {
+    setStatusFilter(status);
+  };
+
+  // Count completed and pending tasks for the summary display
+  const completedCount = taskItems.filter(item => item.completed).length;
+  const pendingCount = taskItems.length - completedCount;
+
+// Apply filters to the task list
+const filteredTasks = taskItems.filter(item => {
+  // Check if the task matches the selected category filter:
+  // - If a category is selected (categoryFilter is not empty), 
+  //   compare it with the task's category
+  // - If no category is selected (categoryFilter is empty), 
+  //   include all tasks (return true)
+  const categoryMatch = categoryFilter ? item.category === categoryFilter : true;
+
+  // Check if the task matches the selected status filter:
+  // - If a status is selected (statusFilter is not empty):
+  //   - If filtering for "completed" tasks, return the task's completed status
+  //   - If filtering for "pending" tasks (implied by statusFilter not being empty 
+  //     and not "completed"), return the inverse of completed status
+  // - If no status is selected (statusFilter is empty), include all tasks (return true)
+  const statusMatch = statusFilter
+    ? statusFilter === 'completed'
+      ? item.completed    // Include if task is completed
+      : !item.completed  // Include if task is NOT completed
+    : true;              // No status filter applied
+
+  // Only include tasks that match BOTH filters (category and status)
+  // This uses logical AND (&&) - both conditions must be true
+  return categoryMatch && statusMatch;
+});
+
+  // Get the task data for the task being edited (if any)
+  const editingTask = editingTaskId 
+    ? taskItems.find(item => item.id === editingTaskId) // Find the task by ID
+    : null; // No task being edited
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <View style={appStyles.container}>
+      {/* Screen title */}
+      <Text style={appStyles.title}>📝 Lista de Tareas</Text>
+      
+      {/* Task summary counters */}
+      <Text style={appStyles.counter}>
+        ✅ Realizadas: {completedCount} | ⏳ Pendientes: {pendingCount}
+      </Text>
+
+      {/* Button to show today's tasks */}
+      <TouchableOpacity 
+        style={appStyles.todayButton}
+        onPress={getTodayTasks}
+      >
+        <Text style={appStyles.todayButtonText}>Ver tareas de hoy</Text>
+      </TouchableOpacity>
+
+      {/* Conditional rendering of TaskForm based on edit mode */}
+      {editingTask ? (
+        <TaskForm
+          key={`edit-form-${editingTaskId}`} // Unique key to force re-render when editing different tasks
+          onSubmit={handleUpdateTask}
+          initialText={editingTask.text}
+          initialCategory={editingTask.category}
+          initialDueDate={new Date(editingTask.dueDate)} // Ensure new Date instance
+          isEditing={true}
+          onCancel={handleCancelEdit}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      ) : (
+        <TaskForm 
+          key="add-form" // Different key for add mode
+          onSubmit={handleAddTask}
+          isEditing={false}
+        />
+      )}
+
+      {/* Task filters component */}
+      <TaskFilters
+        categoryFilter={categoryFilter}
+        statusFilter={statusFilter}
+        onCategoryChange={handleCategoryChange}
+        onStatusChange={handleStatusChange}
+      />
+
+      {/* Task list container */}
+      <View style={appStyles.listContainer}>
+        <FlatList
+          data={filteredTasks}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <TaskItem
+              task={item}
+              onToggle={toggleTask}
+              onEdit={handleEditTask}
+              onDelete={deleteTask}
+            />
+          )}
+          contentContainerStyle={appStyles.listContent}
+        />
+      </View>
+
+      {/* Modal for today's tasks */}
+      <TodayTasksModal
+        visible={showTodayTasksModal}
+        tasks={todayTasks}
+        onClose={() => setShowTodayTasksModal(false)}
+      />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
